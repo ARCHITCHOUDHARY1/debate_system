@@ -40,6 +40,8 @@ env/
 *.log
 logs/
 debate_log.txt
+debate_log.jsonl
+*.jsonl
 
 # OS
 .DS_Store

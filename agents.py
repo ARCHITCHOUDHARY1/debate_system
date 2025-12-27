@@ -12,36 +12,49 @@ RETRY_DELAY = 2  # seconds
 
 
 class DebaterAgent:
-    def __init__(self, agent_name: str, position: str):
+    def __init__(self, agent_name: str, position: str, llm_client=None):
         self.agent_name = agent_name
         self.position = position
-        try:
-            self.llm = ChatMistralAI(
-                model=MODEL_NAME,
-                temperature=TEMPERATURE
-            )
-            logger.log("agent_initialized", {
-                "agent": agent_name,
-                "position": position
-            })
-        except Exception as e:
-            logger.log("agent_init_error", {
-                "agent": agent_name,
-                "error": str(e)
-            })
-            raise
+        
+        # Support dependency injection for testing
+        if llm_client:
+            self.llm = llm_client
+        else:
+            try:
+                from config import MISTRAL_API_KEY, IS_TEST_ENV
+                if not MISTRAL_API_KEY and not IS_TEST_ENV:
+                    raise ValueError(f"MISTRAL_API_KEY required to initialize {agent_name}")
+                
+                if IS_TEST_ENV:
+                    # In test mode, use a simple mock
+                    self.llm = None
+                else:
+                    self.llm = ChatMistralAI(
+                        model=MODEL_NAME,
+                        temperature=TEMPERATURE
+                    )
+                logger.log("agent_initialized", {
+                    "agent": agent_name,
+                    "position": position
+                })
+            except Exception as e:
+                logger.log("agent_init_error", {
+                    "agent": agent_name,
+                    "error": str(e)
+                })
+                raise
     
     def generate_argument(
         self,
         topic: str,
-        previous_arguments: List[Dict],
+        memory_slice: List[Dict],
         round_number: int
     ) -> str:
         try:
             context = "\n".join([
                 f"Round {arg['round']} - {arg['agent']}: {arg['text']}"
-                for arg in previous_arguments
-            ]) if previous_arguments else "No previous arguments yet."
+                for arg in memory_slice
+            ]) if memory_slice else "No previous arguments yet."
             
             turn_number = (round_number + 1) // 2
             
@@ -101,16 +114,27 @@ Your argument:"""
 
 
 class JudgeAgent:
-    def __init__(self):
-        try:
-            self.llm = ChatMistralAI(
-                model=MODEL_NAME,
-                temperature=0.3
-            )
-            logger.log("judge_initialized", {"status": "success"})
-        except Exception as e:
-            logger.log("judge_init_error", {"error": str(e)})
-            raise
+    def __init__(self, llm_client=None):
+        # Support dependency injection for testing
+        if llm_client:
+            self.llm = llm_client
+        else:
+            try:
+                from config import MISTRAL_API_KEY, IS_TEST_ENV
+                if not MISTRAL_API_KEY and not IS_TEST_ENV:
+                    raise ValueError("MISTRAL_API_KEY required to initialize Judge")
+                
+                if IS_TEST_ENV:
+                    self.llm = None
+                else:
+                    self.llm = ChatMistralAI(
+                        model=MODEL_NAME,
+                        temperature=0.3
+                    )
+                logger.log("judge_initialized", {"status": "success"})
+            except Exception as e:
+                logger.log("judge_init_error", {"error": str(e)})
+                raise
     
     def make_judgment(self, topic: str, arguments: List[Dict]) -> str:
         try:
@@ -127,14 +151,21 @@ Evaluate both debaters on:
 3. Rebuttals
 4. Coherence
 
-Declare a winner and explain in 3-4 sentences."""
+You MUST respond with valid JSON in exactly this format:
+{{
+  "winner": "AgentA" or "AgentB" or "Tie",
+  "reasoning": "Detailed 3-4 sentence explanation of your decision",
+  "summary": "Brief 1-2 sentence summary of the debate outcome"
+}}
+
+IMPORTANT: Return ONLY the JSON object, no additional text before or after."""
 
             human_prompt = f"""Topic: {topic}
 
 Debate Transcript:
 {debate_transcript}
 
-Your judgment:"""
+Your judgment (respond with JSON only):"""
 
             messages = [
                 SystemMessage(content=system_prompt),

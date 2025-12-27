@@ -5,12 +5,18 @@ from logger import logger
 
 
 def validate_round(state: DebateState) -> DebateState:
-
     try:
         logger.log("validation_start", {
             "round": state["current_round"],
             "speaker": state["current_speaker"]
         })
+        
+        # Validate expected speaker matches alternation pattern
+        expected_speaker = AGENT_A_NAME if state["current_round"] % 2 == 0 else AGENT_B_NAME
+        if state["current_speaker"] != expected_speaker:
+            error_msg = f"Alternation violation: expected {expected_speaker}, got {state['current_speaker']}"
+            logger.log("alternation_violation", {"error": error_msg})
+            state["errors"].append(error_msg)
         
         # Check if we've reached the round limit
         if state["current_round"] >= TOTAL_ROUNDS:

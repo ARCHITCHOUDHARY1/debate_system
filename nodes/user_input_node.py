@@ -24,5 +24,4 @@ def get_topic_input(topic: str = None) -> str:
 
 
 def sanitize_topic(topic: str) -> str:
-    """Sanitize topic input"""
     return topic.strip()

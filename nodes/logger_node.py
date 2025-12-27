@@ -11,7 +11,6 @@ def log_event(event_type: str, data: dict) -> None:
 
 
 def save_logs() -> None:
-    """Save all logs to file"""
     try:
         logger.save()
     except Exception as e:
